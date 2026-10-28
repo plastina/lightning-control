@@ -31,7 +31,10 @@ internal static class Updater
     private static bool CanSelfUpdate =>
         ExePath is { } path
         && !Path.GetFileNameWithoutExtension(path).Equals("dotnet", StringComparison.OrdinalIgnoreCase)
-        && !Repository.StartsWith("OWNER/", StringComparison.Ordinal);
+        && !Repository.StartsWith("OWNER/", StringComparison.Ordinal)
+        // A single-file bundle has no assembly file on disk. A local build (always "1.0.0.0") has one, and
+        // updating it would overwrite it with the last release.
+        && string.IsNullOrEmpty(Assembly.GetExecutingAssembly().Location);
 
     /// <summary>Removes the previous exe that was renamed out of the way by the last update.</summary>
     public static void CleanUp()

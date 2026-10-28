@@ -5,6 +5,7 @@ public partial class App : System.Windows.Application
     protected override void OnStartup(System.Windows.StartupEventArgs e)
     {
         base.OnStartup(e);
+        Diag.Log($"app: OnStartup args=[{string.Join(' ', e.Args)}]");
         Updater.CleanUp();
         var window = new MainWindow();
         MainWindow = window;

@@ -34,20 +34,30 @@ public static class HidppBattery
     private static List<BatteryReading> ReadAllUnlocked()
     {
         var results = new List<BatteryReading>();
-        foreach (var hid in HidppChannel.LongInterfaces())
+        var interfaces = HidppChannel.LongInterfaces().ToList();
+        Diag.Log($"ReadAll: {interfaces.Count} long interface(s)");
+        foreach (var hid in interfaces)
         {
+            var tag = hid.DevicePath.Length > 40 ? hid.DevicePath[^40..] : hid.DevicePath;
+            var timer = System.Diagnostics.Stopwatch.StartNew();
             try
             {
+                Diag.Log($"  open {hid.ProductID:X4} ...{tag}");
                 using var channel = new HidppChannel(hid);
+                Diag.Log($"  opened in {timer.ElapsedMilliseconds} ms");
                 foreach (var index in DeviceIndices)
                 {
-                    if (Read(channel, index, hid.DevicePath) is { } reading)
+                    var step = timer.ElapsedMilliseconds;
+                    var reading = Read(channel, index, hid.DevicePath);
+                    Diag.Log($"    index {index}: {(reading is null ? "no answer" : reading.Type + "/" + reading.Name)} ({timer.ElapsedMilliseconds - step} ms)");
+                    if (reading is not null)
                         results.Add(reading);
                 }
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or TimeoutException)
             {
                 // Interface busy or removed; it is retried on the next poll.
+                Diag.Log($"  interface failed: {ex.GetType().Name} {ex.Message}");
             }
         }
         return results;

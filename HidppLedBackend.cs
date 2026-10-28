@@ -44,6 +44,8 @@ public sealed class HidppLedBackend : INativeEffectBackend
             {
                 bool ok = HidppLedMemory.Show(_devicePath, _index, next);
                 _lastSent = ok ? next : null;
+                if (ok || _isAvailable)
+                    Diag.Log($"headset: Show({next.Effect} #{next.R:X2}{next.G:X2}{next.B:X2}) -> {(ok ? "ok" : "failed")}");
                 if (ok != _isAvailable)
                 {
                     _isAvailable = ok;

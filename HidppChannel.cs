@@ -32,12 +32,25 @@ internal sealed class HidppChannel : IDisposable
     {
         _stream = hid.Open();
         _stream.ReadTimeout = 500;
+        // Without this a write to a device that stopped answering blocks forever while holding Gate,
+        // and no device is ever discovered again.
+        _stream.WriteTimeout = 500;
         new Thread(Pump) { IsBackground = true }.Start();
     }
 
     /// <summary>Long-report interfaces of every connected Logitech HID device.</summary>
-    public static IEnumerable<HidDevice> LongInterfaces() =>
-        DeviceList.Local.GetHidDevices(LogitechVid).Where(h => h.GetMaxOutputReportLength() == 20);
+    public static IEnumerable<HidDevice> LongInterfaces()
+    {
+        Diag.Log("enumerate: GetHidDevices");
+        var all = DeviceList.Local.GetHidDevices(LogitechVid).ToList();
+        Diag.Log($"enumerate: {all.Count} Logitech HID interface(s), checking report lengths");
+        return all.Where(h =>
+        {
+            int length = h.GetMaxOutputReportLength();
+            Diag.Log($"enumerate: ...{h.DevicePath[^20..]} output length {length}");
+            return length == 20;
+        });
+    }
 
     public static HidppChannel? Open(string devicePath) =>
         LongInterfaces().FirstOrDefault(h => h.DevicePath == devicePath) is { } hid ? new HidppChannel(hid) : null;
@@ -70,7 +83,14 @@ internal sealed class HidppChannel : IDisposable
         packet[2] = feature;
         packet[3] = (byte)(function << 4 | _swid);
         args.CopyTo(packet, 4);
-        _stream.Write(packet);
+        try
+        {
+            _stream.Write(packet);
+        }
+        catch (Exception ex) when (ex is TimeoutException or System.IO.IOException)
+        {
+            return null;  // this index does not take the write; the others on the interface still may
+        }
 
         // Absent receiver slots answer with a short HID++ 1.0 error on another interface, so keep this short.
         var deadline = DateTime.UtcNow.AddMilliseconds(700);

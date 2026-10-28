@@ -41,8 +41,11 @@ public partial class MainWindow : Window
         _frameTimer.Tick += (_, _) => RenderFrame();
         _frameTimer.Start();
 
+        Diag.Log("window: constructed, starting SDK/watcher/poll");
         StartLogitechSdk();
+        Diag.Log("window: SDK step done");
         StartWatcher();
+        Diag.Log("window: watcher started");
         _ = PollBatteryAsync(_shutdown.Token);
         Closed += (_, _) => Shutdown();
         Application.Current.SessionEnding += (_, _) => _exiting = true;
@@ -263,7 +266,12 @@ public partial class MainWindow : Window
         while (!token.IsCancellationRequested)
         {
             bool pending = false;
+            try
+            {
+            var timer = Stopwatch.StartNew();
             var readings = await Task.Run(HidppBattery.ReadAll, token);
+            Diag.Log($"poll: ReadAll took {timer.ElapsedMilliseconds} ms -> " +
+                     (readings.Count == 0 ? "nothing" : string.Join(", ", readings.Select(r => $"{r.Type}/{r.Name}@{r.Index}"))));
             pending |= !readings.Any(r => r.Type == HidppDeviceType.Headset);
             foreach (var reading in readings)
             {
@@ -282,9 +290,12 @@ public partial class MainWindow : Window
                         ? new HidppLedBackend(reading.DevicePath, reading.Index)
                         : new NoLightBackend();
                     device = new LampDevice(id, reading.Name, backend);
+                    if (reading.Type == HidppDeviceType.Mouse)
+                        device.HasLighting = false;  // the mouse only offers DPI and performance
                     if (reading.Type == HidppDeviceType.Headset)
                     {
                         var stored = await Task.Run(() => HidppLedMemory.ReadStored(reading.DevicePath, reading.Index), token);
+                        Diag.Log($"headset: stored light = {(stored is null ? "unreadable" : stored.ToString())}");
                         if (stored is null)
                         {
                             // Not answering yet (just after logon): a card created now would push the default
@@ -303,11 +314,13 @@ public partial class MainWindow : Window
                         }
                     }
                     AddDevice(device);
+                    Diag.Log($"card added: {id} ({reading.Name})");
                 }
                 device.UpdateBattery(reading);
                 if (reading.Name.Length > 0)
                     device.Name = $"{reading.Name}";
-                if (_lightingChecked.Add(device.Id)
+                if (reading.Type == HidppDeviceType.Headset
+                    && _lightingChecked.Add(device.Id)
                     && await Task.Run(() => HidppLighting.HasUserLighting(reading.DevicePath, reading.Index), token) is { } hasLighting)
                 {
                     device.HasLighting = hasLighting;
@@ -324,6 +337,13 @@ public partial class MainWindow : Window
                     await RefreshDpiAsync(device, reading, token);
                 if (reading.Type == HidppDeviceType.Headset && _headsetButtons is null)
                     await StartHeadsetButtonsAsync(device, reading);
+            }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // One bad poll must not end discovery for the rest of the session.
+                Diag.Log($"poll failed: {ex}");
+                pending = true;
             }
 
             try
@@ -347,7 +367,7 @@ public partial class MainWindow : Window
         _sdkActive = LogiLedSdk.TryInit("LightingControl");
         if (!_sdkActive)
             return;
-        AddDevice(new LampDevice("logi:mouse", "Mouse", new LogiSdkBackend(LogiLedSdk.DeviceType.Mouse, zoneCount: 2)));
+        AddDevice(new LampDevice("logi:mouse", "Mouse", new LogiSdkBackend(LogiLedSdk.DeviceType.Mouse, zoneCount: 2)) { HasLighting = false });
         AddDevice(new LampDevice("logi:headset", "Headset", new LogiSdkBackend(LogiLedSdk.DeviceType.Headset, zoneCount: 2, allDevices: true)));
     }
 
