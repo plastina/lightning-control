@@ -32,16 +32,11 @@ jobs:
             -p:Version=$version `
             -o publish
 
-      - name: Rename executable
-        shell: pwsh
-        run: |
-          Move-Item publish/LightingControl.exe "LightingControl-${{ github.event.release.tag_name }}-win-x64.exe"
-
       - name: Upload executable to the release
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release upload "${{ github.event.release.tag_name }}" `
-            "LightingControl-${{ github.event.release.tag_name }}-win-x64.exe" `
+            "publish/LightingControl.exe" `
             --clobber --repo "${{ github.repository }}"

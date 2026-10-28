@@ -8,12 +8,12 @@ namespace LightingControl;
 
 /// <summary>
 /// Checks the latest GitHub release on every launch and, if it is newer than the running build, offers to
-/// replace the exe in place. The release workflow attaches <c>LightingControl-&lt;tag&gt;-win-x64.exe</c>.
+/// replace the exe in place. The release workflow attaches <c>LightingControl.exe</c>.
 /// </summary>
 internal static class Updater
 {
     private const string Repository = "plastina/lightning-control";
-    private const string AssetSuffix = "-win-x64.exe";
+    private const string AssetName = "LightingControl.exe";
 
     private static readonly HttpClient Http = CreateClient();
 
@@ -69,7 +69,7 @@ internal static class Updater
             foreach (var asset in root.GetProperty("assets").EnumerateArray())
             {
                 var name = asset.GetProperty("name").GetString();
-                if (name is not null && name.EndsWith(AssetSuffix, StringComparison.OrdinalIgnoreCase))
+                if (name is not null && name.Equals(AssetName, StringComparison.OrdinalIgnoreCase))
                 {
                     downloadUrl = asset.GetProperty("browser_download_url").GetString();
                     break;
