@@ -1,0 +1,370 @@
+<Window x:Class="LightingControl.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:LightingControl"
+        Title="Controle de Iluminação" Width="900" Height="640" MinWidth="720" MinHeight="480"
+        Background="{StaticResource Bg}" Icon="app.ico" WindowStartupLocation="CenterScreen">
+
+    <Window.Resources>
+        <!-- Tab visibility is bound directly: a local value outranks the TabControl's ItemContainerStyle. -->
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <!-- Sidebar entry: color dot, name, battery. The selected one gets a bar in the device's own color. -->
+        <Style x:Key="DeviceItem" TargetType="ListBoxItem">
+            <Setter Property="Margin" Value="0,0,0,4"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bd" CornerRadius="8" Padding="10" Background="Transparent">
+                            <Grid>
+                                <Rectangle x:Name="Bar" Width="3" HorizontalAlignment="Left" Margin="-10,0,0,0"
+                                           Fill="{Binding Preview}" Visibility="Collapsed"/>
+                                <ContentPresenter/>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource Card}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource Card}"/>
+                                <Setter TargetName="Bar" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="DeviceTab" TargetType="TabItem">
+            <Setter Property="Foreground" Value="{StaticResource Muted}"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Grid Margin="0,0,24,0">
+                            <ContentPresenter ContentSource="Header" Margin="0,12" TextElement.FontSize="13"/>
+                            <Rectangle x:Name="Underline" Height="2" VerticalAlignment="Bottom" Visibility="Hidden"
+                                       Fill="{Binding Preview}"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Underline" Property="Visibility" Value="Visible"/>
+                                <Setter Property="Foreground" Value="{StaticResource Text}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="Field" TargetType="TextBox">
+            <Setter Property="Background" Value="{StaticResource Card}"/>
+            <Setter Property="Foreground" Value="{StaticResource Text}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Padding" Value="4,2"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="220"/>
+            <ColumnDefinition/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Peripherals -->
+        <Border BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0" Padding="12,20">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Top" Text="Periféricos" FontSize="20" FontWeight="SemiBold" Margin="8,0,0,16"/>
+                <CheckBox x:Name="StartupBox" DockPanel.Dock="Bottom" Margin="8,0,8,8" Foreground="{StaticResource Muted}"
+                          Content="Iniciar com o Windows" Click="StartupBox_Click"
+                          ToolTip="Abre minimizado ao entrar no Windows."/>
+                <CheckBox x:Name="SyncBox" DockPanel.Dock="Bottom" Margin="8" Foreground="{StaticResource Muted}"
+                          Content="Sincronizar cores entre todos"/>
+                <ListBox x:Name="DeviceList" Background="Transparent" BorderThickness="0"
+                         SelectionChanged="DeviceList_SelectionChanged"
+                         ItemContainerStyle="{StaticResource DeviceItem}"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate DataType="{x:Type local:LampDevice}">
+                            <DockPanel>
+                                <Ellipse DockPanel.Dock="Left" Width="28" Height="28" Margin="0,0,10,0" Fill="{Binding Preview}">
+                                    <Ellipse.Effect>
+                                        <DropShadowEffect ShadowDepth="0" BlurRadius="12" Opacity="0.8"
+                                                          Color="{Binding Preview.Color}"/>
+                                    </Ellipse.Effect>
+                                </Ellipse>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock FontSize="11" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis"
+                                               Text="{Binding BatteryText}"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
+        </Border>
+
+        <!-- Selected peripheral -->
+        <DockPanel Grid.Column="1">
+            <Border DockPanel.Dock="Bottom" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="28,10">
+                <TextBlock x:Name="StatusLine" TextWrapping="Wrap" Foreground="{StaticResource Muted}" FontSize="12"/>
+            </Border>
+
+            <Grid>
+                <TextBlock x:Name="EmptyText" HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Foreground="{StaticResource Muted}" Text="Procurando dispositivos..."/>
+
+                <ContentControl x:Name="DevicePane" Content="{Binding SelectedItem, ElementName=DeviceList}">
+                    <ContentControl.ContentTemplate>
+                        <DataTemplate DataType="{x:Type local:LampDevice}">
+                            <DockPanel>
+                                <!-- Hero: glows in the device's current color -->
+                                <Grid DockPanel.Dock="Top" Height="170">
+                                    <Rectangle>
+                                        <Rectangle.Fill>
+                                            <RadialGradientBrush Center="0.78,1" GradientOrigin="0.78,1" RadiusX="0.6" RadiusY="1.2" Opacity="0.45">
+                                                <GradientStop Offset="0" Color="{Binding Preview.Color}"/>
+                                                <GradientStop Offset="1" Color="Transparent"/>
+                                            </RadialGradientBrush>
+                                        </Rectangle.Fill>
+                                    </Rectangle>
+                                    <StackPanel HorizontalAlignment="Right" Margin="0,20,28,0">
+                                        <StackPanel.Style>
+                                            <Style TargetType="StackPanel">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding HasBattery}" Value="False">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </StackPanel.Style>
+                                        <TextBlock Text="{Binding BatteryText}" FontSize="22" FontWeight="SemiBold" HorizontalAlignment="Right"/>
+                                        <TextBlock Text="bateria" FontSize="12" Foreground="{StaticResource Muted}" HorizontalAlignment="Right"/>
+                                        <ProgressBar Width="80" Height="4" Margin="0,6,0,0" Maximum="100" BorderThickness="0"
+                                                     Background="{StaticResource Line}" Foreground="{Binding BatteryBrush}"
+                                                     Value="{Binding BatteryPercent, Mode=OneWay}"/>
+                                    </StackPanel>
+                                    <StackPanel VerticalAlignment="Bottom" Margin="28,0,28,20">
+                                        <TextBlock FontSize="28" FontWeight="SemiBold" TextTrimming="CharacterEllipsis">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+                                                    <Setter Property="Text" Value="{Binding Name}"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsSelected, ElementName=DpiTab}" Value="True">
+                                                            <Setter Property="Text" Value="{Binding DpiText, StringFormat={}{0} DPI}"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                        <TextBlock FontSize="13" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+                                                    <Setter Property="Text">
+                                                        <Setter.Value>
+                                                            <MultiBinding StringFormat="{}{0} · {1}">
+                                                                <Binding Path="Info"/>
+                                                                <Binding Path="StatusText"/>
+                                                            </MultiBinding>
+                                                        </Setter.Value>
+                                                    </Setter>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsSelected, ElementName=DpiTab}" Value="True">
+                                                            <Setter Property="Text">
+                                                                <Setter.Value>
+                                                                    <MultiBinding StringFormat="{}{0} · {1}">
+                                                                        <Binding Path="Name"/>
+                                                                        <Binding Path="DpiRangeText"/>
+                                                                    </MultiBinding>
+                                                                </Setter.Value>
+                                                            </Setter>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </StackPanel>
+                                    <Rectangle Height="1" VerticalAlignment="Bottom" Fill="{StaticResource Line}"/>
+                                </Grid>
+
+                                <TabControl Background="Transparent" BorderThickness="0,1,0,0" BorderBrush="{StaticResource Line}"
+                                            Padding="28,20" ItemContainerStyle="{StaticResource DeviceTab}">
+                                    <TabControl.Template>
+                                        <ControlTemplate TargetType="TabControl">
+                                            <DockPanel>
+                                                <Border DockPanel.Dock="Top" BorderBrush="{StaticResource Line}" BorderThickness="0,0,0,1" Padding="28,0">
+                                                    <TabPanel IsItemsHost="True"/>
+                                                </Border>
+                                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                                    <ContentPresenter ContentSource="SelectedContent" Margin="28,20"/>
+                                                </ScrollViewer>
+                                            </DockPanel>
+                                        </ControlTemplate>
+                                    </TabControl.Template>
+
+                                    <!-- Lighting -->
+                                    <TabItem Header="Iluminação" Visibility="{Binding HasLighting, Converter={StaticResource BoolToVis}}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition/>
+                                                <ColumnDefinition Width="32"/>
+                                                <ColumnDefinition/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <TextBlock Style="{StaticResource Label}" Text="Efeito" Margin="0,0,0,4"/>
+                                                <ComboBox ItemsSource="{x:Static local:LampDevice.Effects}" SelectedItem="{Binding Effect}"/>
+
+                                                <DockPanel>
+                                                    <TextBlock DockPanel.Dock="Right" Style="{StaticResource Label}" Text="{Binding BrightnessText}"/>
+                                                    <TextBlock Style="{StaticResource Label}" Text="Brilho"/>
+                                                </DockPanel>
+                                                <Slider Maximum="1" SmallChange="0.05" LargeChange="0.1" Value="{Binding Brightness}"/>
+
+                                                <DockPanel>
+                                                    <TextBlock DockPanel.Dock="Right" Style="{StaticResource Label}" Text="{Binding R}"/>
+                                                    <TextBlock Style="{StaticResource Label}" Text="R" Foreground="#FF5A5A"/>
+                                                </DockPanel>
+                                                <Slider Maximum="255" Value="{Binding R}"/>
+                                                <DockPanel>
+                                                    <TextBlock DockPanel.Dock="Right" Style="{StaticResource Label}" Text="{Binding G}"/>
+                                                    <TextBlock Style="{StaticResource Label}" Text="G" Foreground="#5AE38A"/>
+                                                </DockPanel>
+                                                <Slider Maximum="255" Value="{Binding G}"/>
+                                                <DockPanel>
+                                                    <TextBlock DockPanel.Dock="Right" Style="{StaticResource Label}" Text="{Binding B}"/>
+                                                    <TextBlock Style="{StaticResource Label}" Text="B" Foreground="#5AA9FF"/>
+                                                </DockPanel>
+                                                <Slider Maximum="255" Value="{Binding B}"/>
+                                            </StackPanel>
+
+                                            <StackPanel Grid.Column="2">
+                                                <DockPanel Margin="0,0,0,4">
+                                                    <TextBox DockPanel.Dock="Right" Width="80" Style="{StaticResource Field}"
+                                                             Text="{Binding Hex, UpdateSourceTrigger=LostFocus}" KeyDown="Hex_KeyDown"/>
+                                                    <TextBlock Style="{StaticResource Label}" Text="Cor" Margin="0" VerticalAlignment="Center"/>
+                                                </DockPanel>
+                                                <WrapPanel Margin="0,4,0,0">
+                                                    <Button Style="{StaticResource Swatch}" Background="#FFFFFF" Tag="#FFFFFF" Click="Preset_Click"/>
+                                                    <Button Style="{StaticResource Swatch}" Background="#FF2D2D" Tag="#FF2D2D" Click="Preset_Click"/>
+                                                    <Button Style="{StaticResource Swatch}" Background="#FF8A00" Tag="#FF8A00" Click="Preset_Click"/>
+                                                    <Button Style="{StaticResource Swatch}" Background="#FFE600" Tag="#FFE600" Click="Preset_Click"/>
+                                                    <Button Style="{StaticResource Swatch}" Background="#00E676" Tag="#00E676" Click="Preset_Click"/>
+                                                    <Button Style="{StaticResource Swatch}" Background="#00B8FC" Tag="#00B8FC" Click="Preset_Click"/>
+                                                    <Button Style="{StaticResource Swatch}" Background="#3D5AFE" Tag="#3D5AFE" Click="Preset_Click"/>
+                                                    <Button Style="{StaticResource Swatch}" Background="#D500F9" Tag="#D500F9" Click="Preset_Click"/>
+                                                </WrapPanel>
+
+                                                <DockPanel>
+                                                    <TextBlock DockPanel.Dock="Right" Style="{StaticResource Label}" Text="{Binding SpeedText}"/>
+                                                    <TextBlock Style="{StaticResource Label}" Text="Velocidade"/>
+                                                </DockPanel>
+                                                <Slider Minimum="0.2" Maximum="4" Value="{Binding Speed}"/>
+
+                                                <StackPanel Margin="0,24,0,0" Visibility="{Binding CanSaveLighting, Converter={StaticResource BoolToVis}}">
+                                                    <TextBlock Style="{StaticResource Label}" Text="Memória do aparelho" Margin="0,0,0,4"/>
+                                                    <TextBlock FontSize="12" Foreground="{StaticResource Muted}" TextWrapping="Wrap"
+                                                               Text="Grava o efeito e a cor atuais no próprio aparelho. Ele usa essa luz quando nem o G HUB nem este app estão controlando."/>
+                                                    <Button Margin="0,10,0,0" HorizontalAlignment="Left" Style="{StaticResource Chip}"
+                                                            Padding="14,6" Content="Gravar no aparelho" Click="SaveLighting_Click"/>
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </Grid>
+                                    </TabItem>
+
+                                    <!-- DPI: only for devices that report it -->
+                                    <TabItem x:Name="DpiTab" Header="DPI" Visibility="{Binding HasDpi, Converter={StaticResource BoolToVis}}">
+                                        <StackPanel>
+                                            <TextBlock Style="{StaticResource Label}" Text="Sensibilidade" Margin="0,0,0,4"/>
+                                            <DockPanel>
+                                                <TextBox DockPanel.Dock="Right" Width="64" Margin="12,0,0,0" Style="{StaticResource Field}"
+                                                         HorizontalContentAlignment="Right"
+                                                         Text="{Binding DpiText, UpdateSourceTrigger=LostFocus}" KeyDown="Hex_KeyDown"/>
+                                                <Slider Minimum="{Binding DpiMin}" Maximum="{Binding DpiMax}"
+                                                        SmallChange="{Binding DpiStep}" LargeChange="400"
+                                                        VerticalAlignment="Center" Value="{Binding Dpi, Delay=250}"/>
+                                            </DockPanel>
+                                            <TextBlock Style="{StaticResource Label}" Text="Atalhos" Margin="0,20,0,6"/>
+                                            <StackPanel Orientation="Horizontal">
+                                                <Button Content="400" Tag="400" Click="DpiPreset_Click" Style="{StaticResource Chip}"/>
+                                                <Button Content="800" Tag="800" Click="DpiPreset_Click" Style="{StaticResource Chip}"/>
+                                                <Button Content="1600" Tag="1600" Click="DpiPreset_Click" Style="{StaticResource Chip}"/>
+                                                <Button Content="3200" Tag="3200" Click="DpiPreset_Click" Style="{StaticResource Chip}"/>
+                                                <Button Content="6400" Tag="6400" Click="DpiPreset_Click" Style="{StaticResource Chip}"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </TabItem>
+
+                                    <!-- Performance and onboard memory: only for devices that report a polling rate -->
+                                    <TabItem Header="Desempenho" Visibility="{Binding HasReportRate, Converter={StaticResource BoolToVis}}">
+                                        <StackPanel MaxWidth="520" HorizontalAlignment="Left">
+                                            <TextBlock Style="{StaticResource Label}" Text="Taxa de resposta" Margin="0,0,0,4"/>
+                                            <ComboBox Width="160" HorizontalAlignment="Left" ItemsSource="{Binding ReportRateOptions}"
+                                                      SelectedItem="{Binding ReportRate}" ItemStringFormat="{}{0} Hz"/>
+                                            <TextBlock Margin="0,6,0,0" FontSize="12" Foreground="{StaticResource Muted}" TextWrapping="Wrap"
+                                                       Text="Menos Hz economiza bateria; 1000 Hz dá a menor latência."/>
+
+                                            <TextBlock Style="{StaticResource Label}" Text="Memória interna do mouse" Margin="0,28,0,4"/>
+                                            <TextBlock FontSize="12" Foreground="{StaticResource Muted}" TextWrapping="Wrap"
+                                                       Text="Grava a taxa de resposta e o DPI atual nos perfis do mouse. Vale sempre que o G HUB não estiver rodando, inclusive em outro PC. Com o G HUB aberto, o perfil dele tem prioridade."/>
+                                            <CheckBox Margin="0,10,0,0" IsChecked="{Binding IncludeLightingOnSave}"
+                                                      Foreground="{StaticResource Text}" Content="Incluir iluminação">
+                                                <CheckBox.Style>
+                                                    <Style TargetType="CheckBox">
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding HasLighting}" Value="False">
+                                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </CheckBox.Style>
+                                            </CheckBox>
+                                            <Button Margin="0,12,0,0" HorizontalAlignment="Left" Style="{StaticResource Chip}"
+                                                    Padding="14,6" Content="Gravar na memória do mouse" Click="SaveOnboard_Click"/>
+                                        </StackPanel>
+                                    </TabItem>
+
+                                    <!-- Buttons: one row per button, action and its argument side by side -->
+                                    <TabItem Header="Botões" Visibility="{Binding HasButtons, Converter={StaticResource BoolToVis}}">
+                                        <ItemsControl ItemsSource="{Binding Buttons}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate DataType="{x:Type local:ButtonMapping}">
+                                                    <Grid Margin="0,0,0,8">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="180"/>
+                                                            <ColumnDefinition Width="200"/>
+                                                            <ColumnDefinition/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Text="{Binding Label}" Foreground="{StaticResource Muted}" VerticalAlignment="Center"
+                                                                   TextTrimming="CharacterEllipsis"/>
+                                                        <ComboBox Grid.Column="1" ItemsSource="{x:Static local:ButtonMapping.Options}"
+                                                                  DisplayMemberPath="Label" SelectedValuePath="Action"
+                                                                  SelectedValue="{Binding Action}"/>
+                                                        <TextBox Grid.Column="2" Margin="8,0,0,0" ToolTip="{Binding ArgumentHint}"
+                                                                 Text="{Binding Argument, UpdateSourceTrigger=LostFocus}" KeyDown="Hex_KeyDown">
+                                                            <TextBox.Style>
+                                                                <Style TargetType="TextBox" BasedOn="{StaticResource Field}">
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding NeedsArgument}" Value="False">
+                                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBox.Style>
+                                                        </TextBox>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </TabItem>
+                                </TabControl>
+                            </DockPanel>
+                        </DataTemplate>
+                    </ContentControl.ContentTemplate>
+                </ContentControl>
+            </Grid>
+        </DockPanel>
+    </Grid>
+</Window>
