@@ -340,8 +340,13 @@
                                                         <TextBlock Text="{Binding Label}" Foreground="{StaticResource Muted}" VerticalAlignment="Center"
                                                                    TextTrimming="CharacterEllipsis"/>
                                                         <ComboBox Grid.Column="1" ItemsSource="{x:Static local:ButtonMapping.Options}"
-                                                                  DisplayMemberPath="Label" SelectedValuePath="Action"
-                                                                  SelectedValue="{Binding Action}"/>
+                                                                  SelectedValuePath="Action" SelectedValue="{Binding Action}">
+                                                            <ComboBox.ItemTemplate>
+                                                                <DataTemplate>
+                                                                    <TextBlock Text="{Binding Label}"/>
+                                                                </DataTemplate>
+                                                            </ComboBox.ItemTemplate>
+                                                        </ComboBox>
                                                         <TextBox Grid.Column="2" Margin="8,0,0,0" ToolTip="{Binding ArgumentHint}"
                                                                  Text="{Binding Argument, UpdateSourceTrigger=LostFocus}" KeyDown="Hex_KeyDown">
                                                             <TextBox.Style>
