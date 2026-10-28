@@ -252,11 +252,19 @@ public partial class MainWindow : Window
             device.Dpi = dpi;
     }
 
+    // Right after logon the receiver/headset often is not answering yet; poll fast until they show up.
+    private static readonly TimeSpan StartupInterval = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan StartupWindow = TimeSpan.FromMinutes(3);
+    private const int StoredLedAttempts = 6;
+    private readonly Dictionary<string, int> _storedLedTries = new();
+
     private async Task PollBatteryAsync(CancellationToken token)
     {
         while (!token.IsCancellationRequested)
         {
+            bool pending = false;
             var readings = await Task.Run(HidppBattery.ReadAll, token);
+            pending |= !readings.Any(r => r.Type == HidppDeviceType.Headset);
             foreach (var reading in readings)
             {
                 var id = reading.Type switch
@@ -274,9 +282,26 @@ public partial class MainWindow : Window
                         ? new HidppLedBackend(reading.DevicePath, reading.Index)
                         : new NoLightBackend();
                     device = new LampDevice(id, reading.Name, backend);
-                    if (reading.Type == HidppDeviceType.Headset
-                        && await Task.Run(() => HidppLedMemory.ReadStored(reading.DevicePath, reading.Index), token) is { } stored)
-                        device.LoadLed(stored);  // before the first frame, so the stored light is not overwritten
+                    if (reading.Type == HidppDeviceType.Headset)
+                    {
+                        var stored = await Task.Run(() => HidppLedMemory.ReadStored(reading.DevicePath, reading.Index), token);
+                        if (stored is null)
+                        {
+                            // Not answering yet (just after logon): a card created now would push the default
+                            // color over the user's. Retry a few times before giving up on the stored light.
+                            _storedLedTries.TryGetValue(id, out var tries);
+                            _storedLedTries[id] = ++tries;
+                            if (tries < StoredLedAttempts)
+                            {
+                                pending = true;
+                                continue;
+                            }
+                        }
+                        else
+                        {
+                            device.LoadLed(stored);  // before the first frame, so the stored light is not overwritten
+                        }
+                    }
                     AddDevice(device);
                 }
                 device.UpdateBattery(reading);
@@ -303,7 +328,8 @@ public partial class MainWindow : Window
 
             try
             {
-                await Task.Delay(BatteryInterval, token);
+                bool starting = pending && _clock.Elapsed < StartupWindow;
+                await Task.Delay(starting ? StartupInterval : BatteryInterval, token);
             }
             catch (TaskCanceledException)
             {
